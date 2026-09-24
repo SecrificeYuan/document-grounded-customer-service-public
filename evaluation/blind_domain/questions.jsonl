@@ -1,0 +1,10 @@
+{"id":"B01","session_id":"BLIND-B01","question":"2030年4月9日借出的书借期多久？"}
+{"id":"B02","session_id":"BLIND-B02","question":"2030年4月10日借出的书借期多久？"}
+{"id":"B03","session_id":"BLIND-B03","question":"已经逾期但没人预约，可以续借吗？"}
+{"id":"B04","session_id":"BLIND-B04","question":"没逾期没人预约且从未续借，现在能续一次吗？"}
+{"id":"B05","session_id":"BLIND-B05","question":"遗失登记后确定赔多少钱？"}
+{"id":"B06","session_id":"BLIND-B06","question":"新馆具体哪天开？"}
+{"id":"B07","session_id":"BLIND-B07","question":"明天天气如何？"}
+{"id":"B08","session_id":"BLIND-B08","question":"忘记借出日，期限该算20还是30天？"}
+{"id":"B09","session_id":"BLIND-B09","question":"阅览室何时开放？"}
+{"id":"B10","session_id":"BLIND-B10","question":"阅览室开放时段和明天天气分别是什么？"}
