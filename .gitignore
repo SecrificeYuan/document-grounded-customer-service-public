@@ -1,0 +1,13 @@
+.venv/
+venv/
+.env
+.env.*
+__pycache__/
+*.py[cod]
+.pytest_cache/
+outputs/
+artifacts/contracts/
+evaluation/results/
+staging/
+dist/
+tmp/
