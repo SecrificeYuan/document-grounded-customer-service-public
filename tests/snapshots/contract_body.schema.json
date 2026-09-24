@@ -1,0 +1,855 @@
+{
+  "$defs": {
+    "BoolValue": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "boolean",
+          "title": "Kind",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "kind",
+        "value"
+      ],
+      "title": "BoolValue",
+      "type": "object"
+    },
+    "Claim": {
+      "additionalProperties": false,
+      "properties": {
+        "canonical_text": {
+          "title": "Canonical Text",
+          "type": "string"
+        },
+        "claim_id": {
+          "title": "Claim Id",
+          "type": "string"
+        },
+        "evidence_ids": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "normalized_literals": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "boolean": "#/$defs/BoolValue",
+                "date": "#/$defs/DateValue",
+                "datetime": "#/$defs/DateTimeValue",
+                "decimal": "#/$defs/DecimalValue",
+                "duration": "#/$defs/QuantityValue",
+                "enum": "#/$defs/EnumValue",
+                "integer": "#/$defs/IntValue",
+                "money": "#/$defs/QuantityValue",
+                "quantity": "#/$defs/QuantityValue",
+                "string": "#/$defs/StringValue"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/StringValue"
+              },
+              {
+                "$ref": "#/$defs/EnumValue"
+              },
+              {
+                "$ref": "#/$defs/BoolValue"
+              },
+              {
+                "$ref": "#/$defs/IntValue"
+              },
+              {
+                "$ref": "#/$defs/DecimalValue"
+              },
+              {
+                "$ref": "#/$defs/DateValue"
+              },
+              {
+                "$ref": "#/$defs/DateTimeValue"
+              },
+              {
+                "$ref": "#/$defs/QuantityValue"
+              }
+            ]
+          },
+          "title": "Normalized Literals",
+          "type": "array"
+        },
+        "qualifiers": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Qualifiers",
+          "type": "array"
+        },
+        "required_companion_claim_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Required Companion Claim Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "claim_id",
+        "canonical_text",
+        "evidence_ids"
+      ],
+      "title": "Claim",
+      "type": "object"
+    },
+    "ConditionGroup": {
+      "additionalProperties": false,
+      "properties": {
+        "all": {
+          "items": {
+            "$ref": "#/$defs/Predicate"
+          },
+          "minItems": 1,
+          "title": "All",
+          "type": "array"
+        }
+      },
+      "required": [
+        "all"
+      ],
+      "title": "ConditionGroup",
+      "type": "object"
+    },
+    "ContractDocument": {
+      "additionalProperties": false,
+      "properties": {
+        "document_id": {
+          "title": "Document Id",
+          "type": "string"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Effective From"
+        },
+        "effective_to": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Effective To"
+        },
+        "published_on": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Published On"
+        },
+        "supersedes_document_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Supersedes Document Ids",
+          "type": "array"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "version_label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Version Label"
+        }
+      },
+      "required": [
+        "document_id",
+        "title",
+        "version_label",
+        "published_on",
+        "effective_from",
+        "effective_to"
+      ],
+      "title": "ContractDocument",
+      "type": "object"
+    },
+    "ContractWarning": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "evidence_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "severity": {
+          "enum": [
+            "warning",
+            "blocking"
+          ],
+          "title": "Severity",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "severity",
+        "message"
+      ],
+      "title": "ContractWarning",
+      "type": "object"
+    },
+    "DateTimeValue": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "datetime",
+          "title": "Kind",
+          "type": "string"
+        },
+        "value": {
+          "format": "date-time",
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "value"
+      ],
+      "title": "DateTimeValue",
+      "type": "object"
+    },
+    "DateValue": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "date",
+          "title": "Kind",
+          "type": "string"
+        },
+        "value": {
+          "format": "date",
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "value"
+      ],
+      "title": "DateValue",
+      "type": "object"
+    },
+    "DecimalValue": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "decimal",
+          "title": "Kind",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "value"
+      ],
+      "title": "DecimalValue",
+      "type": "object"
+    },
+    "EnumOption": {
+      "additionalProperties": false,
+      "properties": {
+        "aliases": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Aliases",
+          "type": "array"
+        },
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "display_name": {
+          "title": "Display Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "display_name"
+      ],
+      "title": "EnumOption",
+      "type": "object"
+    },
+    "EnumValue": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "enum",
+          "title": "Kind",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "value"
+      ],
+      "title": "EnumValue",
+      "type": "object"
+    },
+    "FieldDefinition": {
+      "additionalProperties": false,
+      "properties": {
+        "aliases": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Aliases",
+          "type": "array"
+        },
+        "allowed_values": {
+          "items": {
+            "$ref": "#/$defs/EnumOption"
+          },
+          "title": "Allowed Values",
+          "type": "array"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "display_name": {
+          "title": "Display Name",
+          "type": "string"
+        },
+        "evidence_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "field_id": {
+          "title": "Field Id",
+          "type": "string"
+        },
+        "value_kind": {
+          "enum": [
+            "string",
+            "enum",
+            "boolean",
+            "integer",
+            "decimal",
+            "date",
+            "datetime",
+            "duration",
+            "money",
+            "quantity"
+          ],
+          "title": "Value Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "field_id",
+        "display_name",
+        "description",
+        "value_kind"
+      ],
+      "title": "FieldDefinition",
+      "type": "object"
+    },
+    "IntValue": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "integer",
+          "title": "Kind",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "value"
+      ],
+      "title": "IntValue",
+      "type": "object"
+    },
+    "LocaleProfile": {
+      "additionalProperties": false,
+      "properties": {
+        "language": {
+          "const": "zh-CN",
+          "title": "Language",
+          "type": "string"
+        },
+        "normalization_version": {
+          "title": "Normalization Version",
+          "type": "string"
+        },
+        "output_encoding": {
+          "const": "utf-8",
+          "title": "Output Encoding",
+          "type": "string"
+        },
+        "timezone": {
+          "const": "Asia/Shanghai",
+          "title": "Timezone",
+          "type": "string"
+        }
+      },
+      "required": [
+        "language",
+        "timezone",
+        "output_encoding",
+        "normalization_version"
+      ],
+      "title": "LocaleProfile",
+      "type": "object"
+    },
+    "PolicyUnit": {
+      "additionalProperties": false,
+      "properties": {
+        "applicability_any": {
+          "items": {
+            "$ref": "#/$defs/ConditionGroup"
+          },
+          "title": "Applicability Any",
+          "type": "array"
+        },
+        "claims": {
+          "items": {
+            "$ref": "#/$defs/Claim"
+          },
+          "minItems": 1,
+          "title": "Claims",
+          "type": "array"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Effective From"
+        },
+        "effective_to": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Effective To"
+        },
+        "family_id": {
+          "title": "Family Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "fact",
+            "policy",
+            "procedure",
+            "exception",
+            "contact"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "overrides_unit_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Overrides Unit Ids",
+          "type": "array"
+        },
+        "required_field_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Required Field Ids",
+          "type": "array"
+        },
+        "time_basis": {
+          "$ref": "#/$defs/TimeBasis"
+        },
+        "topic_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Topic Ids",
+          "type": "array"
+        },
+        "unit_id": {
+          "title": "Unit Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "unit_id",
+        "family_id",
+        "kind",
+        "time_basis",
+        "effective_from",
+        "effective_to",
+        "claims"
+      ],
+      "title": "PolicyUnit",
+      "type": "object"
+    },
+    "Predicate": {
+      "additionalProperties": false,
+      "properties": {
+        "field_id": {
+          "title": "Field Id",
+          "type": "string"
+        },
+        "operator": {
+          "enum": [
+            "exists",
+            "not_exists",
+            "eq",
+            "neq",
+            "in",
+            "not_in",
+            "before",
+            "on_or_after",
+            "between"
+          ],
+          "title": "Operator",
+          "type": "string"
+        },
+        "values": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "boolean": "#/$defs/BoolValue",
+                "date": "#/$defs/DateValue",
+                "datetime": "#/$defs/DateTimeValue",
+                "decimal": "#/$defs/DecimalValue",
+                "duration": "#/$defs/QuantityValue",
+                "enum": "#/$defs/EnumValue",
+                "integer": "#/$defs/IntValue",
+                "money": "#/$defs/QuantityValue",
+                "quantity": "#/$defs/QuantityValue",
+                "string": "#/$defs/StringValue"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/StringValue"
+              },
+              {
+                "$ref": "#/$defs/EnumValue"
+              },
+              {
+                "$ref": "#/$defs/BoolValue"
+              },
+              {
+                "$ref": "#/$defs/IntValue"
+              },
+              {
+                "$ref": "#/$defs/DecimalValue"
+              },
+              {
+                "$ref": "#/$defs/DateValue"
+              },
+              {
+                "$ref": "#/$defs/DateTimeValue"
+              },
+              {
+                "$ref": "#/$defs/QuantityValue"
+              }
+            ]
+          },
+          "title": "Values",
+          "type": "array"
+        }
+      },
+      "required": [
+        "field_id",
+        "operator"
+      ],
+      "title": "Predicate",
+      "type": "object"
+    },
+    "QuantityValue": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "duration",
+            "money",
+            "quantity"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "unit_code": {
+          "minLength": 1,
+          "title": "Unit Code",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "value",
+        "unit_code"
+      ],
+      "title": "QuantityValue",
+      "type": "object"
+    },
+    "StringValue": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "string",
+          "title": "Kind",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "value"
+      ],
+      "title": "StringValue",
+      "type": "object"
+    },
+    "TimeBasis": {
+      "additionalProperties": false,
+      "properties": {
+        "field_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Field Id"
+        },
+        "kind": {
+          "enum": [
+            "none",
+            "reference_date",
+            "field"
+          ],
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "field_id"
+      ],
+      "title": "TimeBasis",
+      "type": "object"
+    },
+    "Topic": {
+      "additionalProperties": false,
+      "properties": {
+        "aliases": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Aliases",
+          "type": "array"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "disposition": {
+          "enum": [
+            "covered",
+            "in_scope_uncovered",
+            "out_of_scope"
+          ],
+          "title": "Disposition",
+          "type": "string"
+        },
+        "evidence_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "topic_id": {
+          "title": "Topic Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "topic_id",
+        "description",
+        "disposition"
+      ],
+      "title": "Topic",
+      "type": "object"
+    },
+    "UnitDefinition": {
+      "additionalProperties": false,
+      "properties": {
+        "aliases": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Aliases",
+          "type": "array"
+        },
+        "dimension": {
+          "title": "Dimension",
+          "type": "string"
+        },
+        "display_name": {
+          "title": "Display Name",
+          "type": "string"
+        },
+        "evidence_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "unit_code": {
+          "title": "Unit Code",
+          "type": "string"
+        }
+      },
+      "required": [
+        "unit_code",
+        "display_name",
+        "dimension"
+      ],
+      "title": "UnitDefinition",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "documents": {
+      "items": {
+        "$ref": "#/$defs/ContractDocument"
+      },
+      "title": "Documents",
+      "type": "array"
+    },
+    "fields": {
+      "items": {
+        "$ref": "#/$defs/FieldDefinition"
+      },
+      "title": "Fields",
+      "type": "array"
+    },
+    "locale": {
+      "$ref": "#/$defs/LocaleProfile"
+    },
+    "policy_units": {
+      "items": {
+        "$ref": "#/$defs/PolicyUnit"
+      },
+      "title": "Policy Units",
+      "type": "array"
+    },
+    "scope": {
+      "items": {
+        "$ref": "#/$defs/Topic"
+      },
+      "title": "Scope",
+      "type": "array"
+    },
+    "units": {
+      "items": {
+        "$ref": "#/$defs/UnitDefinition"
+      },
+      "title": "Units",
+      "type": "array"
+    },
+    "warnings": {
+      "items": {
+        "$ref": "#/$defs/ContractWarning"
+      },
+      "title": "Warnings",
+      "type": "array"
+    }
+  },
+  "required": [
+    "locale"
+  ],
+  "title": "ContractBody",
+  "type": "object"
+}

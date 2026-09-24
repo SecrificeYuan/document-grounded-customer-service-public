@@ -1,0 +1,533 @@
+{
+  "$defs": {
+    "BoolValue": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "boolean",
+          "title": "Kind",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "kind",
+        "value"
+      ],
+      "title": "BoolValue",
+      "type": "object"
+    },
+    "DateTimeValue": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "datetime",
+          "title": "Kind",
+          "type": "string"
+        },
+        "value": {
+          "format": "date-time",
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "value"
+      ],
+      "title": "DateTimeValue",
+      "type": "object"
+    },
+    "DateValue": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "date",
+          "title": "Kind",
+          "type": "string"
+        },
+        "value": {
+          "format": "date",
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "value"
+      ],
+      "title": "DateValue",
+      "type": "object"
+    },
+    "DecimalValue": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "decimal",
+          "title": "Kind",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "value"
+      ],
+      "title": "DecimalValue",
+      "type": "object"
+    },
+    "EnumValue": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "enum",
+          "title": "Kind",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "value"
+      ],
+      "title": "EnumValue",
+      "type": "object"
+    },
+    "ExtractedFact": {
+      "additionalProperties": false,
+      "properties": {
+        "field_id": {
+          "title": "Field Id",
+          "type": "string"
+        },
+        "intent_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Intent Ids",
+          "type": "array"
+        },
+        "sources": {
+          "items": {
+            "$ref": "#/$defs/Span"
+          },
+          "minItems": 1,
+          "title": "Sources",
+          "type": "array"
+        },
+        "value": {
+          "discriminator": {
+            "mapping": {
+              "boolean": "#/$defs/BoolValue",
+              "date": "#/$defs/DateValue",
+              "datetime": "#/$defs/DateTimeValue",
+              "decimal": "#/$defs/DecimalValue",
+              "duration": "#/$defs/QuantityValue",
+              "enum": "#/$defs/EnumValue",
+              "integer": "#/$defs/IntValue",
+              "money": "#/$defs/QuantityValue",
+              "quantity": "#/$defs/QuantityValue",
+              "string": "#/$defs/StringValue"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/StringValue"
+            },
+            {
+              "$ref": "#/$defs/EnumValue"
+            },
+            {
+              "$ref": "#/$defs/BoolValue"
+            },
+            {
+              "$ref": "#/$defs/IntValue"
+            },
+            {
+              "$ref": "#/$defs/DecimalValue"
+            },
+            {
+              "$ref": "#/$defs/DateValue"
+            },
+            {
+              "$ref": "#/$defs/DateTimeValue"
+            },
+            {
+              "$ref": "#/$defs/QuantityValue"
+            }
+          ],
+          "title": "Value"
+        }
+      },
+      "required": [
+        "field_id",
+        "value",
+        "sources"
+      ],
+      "title": "ExtractedFact",
+      "type": "object"
+    },
+    "IntValue": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "integer",
+          "title": "Kind",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "value"
+      ],
+      "title": "IntValue",
+      "type": "object"
+    },
+    "Intent": {
+      "additionalProperties": false,
+      "properties": {
+        "claim_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Claim Ids",
+          "type": "array"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "family_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Family Ids",
+          "type": "array"
+        },
+        "intent_id": {
+          "title": "Intent Id",
+          "type": "string"
+        },
+        "mode": {
+          "enum": [
+            "rule_description",
+            "case_application"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "scope": {
+          "enum": [
+            "in_scope",
+            "out_of_scope",
+            "uncertain"
+          ],
+          "title": "Scope",
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/Span"
+        }
+      },
+      "required": [
+        "intent_id",
+        "source",
+        "description",
+        "scope",
+        "mode"
+      ],
+      "title": "Intent",
+      "type": "object"
+    },
+    "PlannedClaim": {
+      "additionalProperties": false,
+      "properties": {
+        "assertion_text": {
+          "title": "Assertion Text",
+          "type": "string"
+        },
+        "claim_id": {
+          "title": "Claim Id",
+          "type": "string"
+        },
+        "evidence_ids": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "intent_id": {
+          "title": "Intent Id",
+          "type": "string"
+        },
+        "quotes": {
+          "items": {
+            "$ref": "#/$defs/QuoteSelection"
+          },
+          "minItems": 1,
+          "title": "Quotes",
+          "type": "array"
+        },
+        "unit_id": {
+          "title": "Unit Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "intent_id",
+        "unit_id",
+        "claim_id",
+        "assertion_text",
+        "evidence_ids",
+        "quotes"
+      ],
+      "title": "PlannedClaim",
+      "type": "object"
+    },
+    "QuantityValue": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "duration",
+            "money",
+            "quantity"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "unit_code": {
+          "minLength": 1,
+          "title": "Unit Code",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "value",
+        "unit_code"
+      ],
+      "title": "QuantityValue",
+      "type": "object"
+    },
+    "QuoteSelection": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence_id": {
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "fragment": {
+          "title": "Fragment",
+          "type": "string"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "fragment"
+      ],
+      "title": "QuoteSelection",
+      "type": "object"
+    },
+    "Span": {
+      "additionalProperties": false,
+      "description": "An exact half-open Unicode code-point range in source text.",
+      "properties": {
+        "end": {
+          "title": "End",
+          "type": "integer"
+        },
+        "start": {
+          "minimum": 0,
+          "title": "Start",
+          "type": "integer"
+        },
+        "text": {
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "start",
+        "end",
+        "text"
+      ],
+      "title": "Span",
+      "type": "object"
+    },
+    "StringValue": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "string",
+          "title": "Kind",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "value"
+      ],
+      "title": "StringValue",
+      "type": "object"
+    },
+    "UnresolvedExpression": {
+      "additionalProperties": false,
+      "properties": {
+        "category": {
+          "enum": [
+            "time",
+            "reference",
+            "missing_subject",
+            "other"
+          ],
+          "title": "Category",
+          "type": "string"
+        },
+        "field_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Field Ids",
+          "type": "array"
+        },
+        "intent_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Intent Ids",
+          "type": "array"
+        },
+        "source": {
+          "$ref": "#/$defs/Span"
+        }
+      },
+      "required": [
+        "source",
+        "category"
+      ],
+      "title": "UnresolvedExpression",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "answer_draft": {
+      "title": "Answer Draft",
+      "type": "string"
+    },
+    "claim_plan": {
+      "items": {
+        "$ref": "#/$defs/PlannedClaim"
+      },
+      "title": "Claim Plan",
+      "type": "array"
+    },
+    "conflicting_unit_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Conflicting Unit Ids",
+      "type": "array"
+    },
+    "extracted_facts": {
+      "items": {
+        "$ref": "#/$defs/ExtractedFact"
+      },
+      "title": "Extracted Facts",
+      "type": "array"
+    },
+    "intents": {
+      "items": {
+        "$ref": "#/$defs/Intent"
+      },
+      "minItems": 1,
+      "title": "Intents",
+      "type": "array"
+    },
+    "language": {
+      "const": "zh-CN",
+      "title": "Language",
+      "type": "string"
+    },
+    "missing_field_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Missing Field Ids",
+      "type": "array"
+    },
+    "proposed_decision": {
+      "enum": [
+        "answer",
+        "handoff"
+      ],
+      "title": "Proposed Decision",
+      "type": "string"
+    },
+    "reason_code": {
+      "anyOf": [
+        {
+          "enum": [
+            "OUT_OF_SCOPE",
+            "INSUFFICIENT_EVIDENCE",
+            "AMBIGUOUS"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Reason Code"
+    },
+    "selected_unit_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Selected Unit Ids",
+      "type": "array"
+    },
+    "unresolved_expressions": {
+      "items": {
+        "$ref": "#/$defs/UnresolvedExpression"
+      },
+      "title": "Unresolved Expressions",
+      "type": "array"
+    }
+  },
+  "required": [
+    "language",
+    "intents",
+    "proposed_decision",
+    "reason_code",
+    "answer_draft"
+  ],
+  "title": "AnalysisResult",
+  "type": "object"
+}
