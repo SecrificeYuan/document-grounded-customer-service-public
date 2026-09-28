@@ -51,23 +51,8 @@ python3 -m venv .venv
 | `pdfplumber` | `0.11.10` | 解析 PDF 文本与页面信息 |
 | `pytest` | `9.1.1` | 运行离线自动测试，仅由 `requirements-dev.txt` 引入 |
 
-## 2. 先运行离线测试
 
-无需模型密钥，也不会向模型服务发送文档：
-
-```powershell
-# Windows PowerShell
-.\.venv\Scripts\python.exe -m pytest -q -m "not live_api"
-```
-
-```bash
-# Linux / macOS
-.venv/bin/python -m pytest -q -m "not live_api"
-```
-
-这验证的是仓库中的离线代码测试，不是原考核题的评分。若出现 `No module named pytest`，通常是安装时使用了 `requirements.txt` 而非 `requirements-dev.txt`，或运行时没有使用 `.venv` 中的 Python。
-
-## 3. 配置模型服务
+## 2. 配置模型服务
 
 离线测试不需要密钥；`run` 和 `build-contract` 是在线命令，需要模型服务提供的有效密钥。**密钥来自使用者实际选择的服务商，不一定是 DeepSeek。**但当前代码沿用以下 `DEEPSEEK_*` 环境变量名称，并默认连接 DeepSeek；变量名不等于对任意服务商的兼容承诺。
 
@@ -90,7 +75,7 @@ finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
 
 使用其他兼容服务时，还需在同一个终端设置其地址和模型名，例如 `$env:DEEPSEEK_BASE_URL = "https://<服务商的 API 根地址>"` 和 `$env:DEEPSEEK_MODEL = "<模型名>"`；尖括号是占位符，不可原样运行。Linux/macOS 可用终端或系统的安全密钥管理方式设置同名环境变量。运行结束后，PowerShell 可执行 `Remove-Item Env:DEEPSEEK_API_KEY` 清除当前终端变量。
 
-## 4. 运行仓库自带的合成示例
+## 3. 运行仓库自带的合成示例
 
 示例输入是两份人工构造的图书馆文档和 10 道问题。**执行以下命令会把所指定的示例文档与问题发送给已配置的模型服务，并可能产生费用。**日期固定为模拟业务日期 `2030-04-15`。
 
@@ -141,7 +126,7 @@ finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
 
 每题应有唯一的 `id`。切换文档、模型或相关契约版本，可能生成不同的缓存键；旧缓存不等于新配置下已经完成验收。
 
-## 5. 输出保存在哪里
+## 4. 输出保存在哪里
 
 所有相对路径都相对于**运行命令时的当前工作目录**。按上述示例从项目根目录运行后：
 
@@ -184,4 +169,4 @@ Linux/macOS 使用 `head -n 3 outputs/demo_predictions.jsonl`。答案文件每�
 
 ## 安全与许可
 
-只发送明确获准的文档和问题；不要把参考答案、原始私密材料或密钥作为模型上下文。模型提出的结论须经过确定性校验；证据不足、条件缺失或超出范围时应转人工。本仓库目前未附开源许可证；公开可见不等于授予复制、修改或再分发许可。
+只发送明确获准的文档和问题；不要把参考答案、原始私密材料或密钥作为模型上下文。模型提出的结论须经过确定性校验；证据不足、条件缺失或超出范围时应转人工。
