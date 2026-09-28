@@ -151,7 +151,7 @@ Get-Content .\outputs\demo_predictions.jsonl -Encoding UTF8 -TotalCount 3
 
 Linux/macOS 使用 `head -n 3 outputs/demo_predictions.jsonl`。答案文件每行是一个 JSON 对象，字段为 `id`、`decision`、`answer`、`reason_code` 和 `evidence`；`decision` 为 `answer` 时附证据，为 `handoff` 时转人工。再次使用同一个 `--output` 路径，会在整批结果校验完成后**替换旧文件**；需要保留多轮结果时请使用不同文件名。控制台汇总不会自动另存为报告。`outputs/`、`artifacts/contracts/`、`.env` 等路径已被 `.gitignore` 排除，但提交前仍应检查 `git status`，不要公开实际业务资料和密钥。
 
-## 6. 其他命令与常见问题
+## 5. 其他命令与常见问题
 
 `build-contract` 可为指定文档单独生成或读取契约；`inspect-contract` 可离线检查已经存在的有效缓存。例如，在成功运行上面的示例后：
 
