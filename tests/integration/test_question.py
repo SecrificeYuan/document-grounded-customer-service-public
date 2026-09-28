@@ -7,7 +7,7 @@ from datetime import date
 import pytest
 
 from docqa.analyzer import analyze_question
-from docqa.decision import validate_analysis
+from docqa.decision import _fact_source_matches, validate_analysis
 from docqa.evidence import EvidenceIndex
 from docqa.errors import ConfigurationError, TransportExhausted
 from docqa.llm_client import ModelReply, Usage
@@ -389,6 +389,27 @@ def test_false_boolean_fact_accepts_explicit_medial_negation() -> None:
     )
 
     assert "FACT_SOURCE_MISMATCH" not in {issue.code for issue in report.issues}
+
+
+def test_completed_boolean_accepts_same_action_in_verb_first_order() -> None:
+    field = FieldDefinition(
+        field_id="F_VERIFIED",
+        display_name="身份核验已完成",
+        description="身份核验是否完成",
+        value_kind="boolean",
+        evidence_ids=["E_NEW"],
+    )
+    contract = make_question_context()["contract"]
+    completed = "完成身份核验"
+    fact = ExtractedFact(
+        field_id="F_VERIFIED",
+        value=BoolValue(kind="boolean", value=True),
+        sources=[Span(start=0, end=len(completed), text=completed)],
+    )
+    assert _fact_source_matches(fact, field, contract, date(2030, 1, 10))
+    incomplete = "未完成身份核验"
+    fact.sources = [Span(start=0, end=len(incomplete), text=incomplete)]
+    assert not _fact_source_matches(fact, field, contract, date(2030, 1, 10))
 
 
 def test_negation_cannot_be_hidden_inside_planned_assertion() -> None:

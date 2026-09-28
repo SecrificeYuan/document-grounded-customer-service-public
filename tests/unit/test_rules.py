@@ -19,6 +19,7 @@ from docqa.rule_engine import (
     evaluate_predicate,
     evaluate_rules,
     or_values,
+    _predicate_detail,
 )
 from tests.fixtures.builders import make_analysis, make_contract
 
@@ -232,6 +233,60 @@ def test_missing_exists_is_false_but_not_exists_stays_unknown() -> None:
     assert evaluate_predicate(
         Predicate(field_id="F_DATE", operator="not_exists", values=[]), {}
     ) == Truth.UNKNOWN
+
+
+def test_not_before_if_present_only_excludes_a_known_earlier_date() -> None:
+    predicate = Predicate(
+        field_id="F_DATE",
+        operator="not_before_if_present",
+        values=[DateValue(kind="date", value=date(2030, 1, 10))],
+    )
+    assert evaluate_predicate(predicate, {}) == Truth.TRUE
+    assert evaluate_predicate(
+        predicate, {"F_DATE": DateValue(kind="date", value=date(2030, 1, 9))}
+    ) == Truth.FALSE
+    assert evaluate_predicate(
+        predicate, {"F_DATE": DateValue(kind="date", value=date(2030, 1, 10))}
+    ) == Truth.TRUE
+    assert evaluate_predicate(
+        predicate, {"F_DATE": BoolValue(kind="boolean", value=True)}
+    ) == Truth.UNKNOWN
+
+
+def test_gt_quantity_predicate_requires_a_strictly_greater_matching_unit() -> None:
+    from docqa.models.common import QuantityValue
+
+    predicate = Predicate(
+        field_id="F_USAGE",
+        operator="gt",
+        values=[QuantityValue(kind="quantity", value="20", unit_code="GB")],
+    )
+    assert evaluate_predicate(predicate, {}) == Truth.UNKNOWN
+    assert evaluate_predicate(predicate, {"F_USAGE": QuantityValue(kind="quantity", value="20", unit_code="GB")}) == Truth.FALSE
+    assert evaluate_predicate(predicate, {"F_USAGE": QuantityValue(kind="quantity", value="20.1", unit_code="GB")}) == Truth.TRUE
+    assert evaluate_predicate(predicate, {"F_USAGE": QuantityValue(kind="quantity", value="21", unit_code="MB")}) == Truth.UNKNOWN
+
+
+def test_next_day_natural_day_window_is_inclusive_and_needs_both_dates() -> None:
+    predicate = Predicate(
+        field_id="F_APPLICATION",
+        operator="within_natural_days_from_next_day",
+        related_field_id="F_RECEIPT",
+        values=[QuantityValue(kind="duration", value="7", unit_code="NATURAL_DAY")],
+    )
+    for day, expected in [(1, Truth.FALSE), (2, Truth.TRUE), (8, Truth.TRUE), (9, Truth.FALSE)]:
+        assert evaluate_predicate(predicate, {
+            "F_APPLICATION": DateValue(kind="date", value=date(2030, 1, day)),
+            "F_RECEIPT": DateValue(kind="date", value=date(2030, 1, 1)),
+        }) == expected
+    assert evaluate_predicate(predicate, {"F_APPLICATION": DateValue(kind="date", value=date(2030, 1, 2))}) == Truth.UNKNOWN
+    assert evaluate_predicate(predicate, {"F_RECEIPT": DateValue(kind="date", value=date(2030, 1, 1))}) == Truth.UNKNOWN
+    assert evaluate_predicate(predicate, {
+        "F_APPLICATION": DateValue(kind="date", value=date(2030, 1, 2)),
+        "F_RECEIPT": BoolValue(kind="boolean", value=True),
+    }) == Truth.UNKNOWN
+    detail = _predicate_detail(predicate, {"F_APPLICATION": DateValue(kind="date", value=date(2030, 1, 2))})
+    assert detail.missing == {"F_RECEIPT"}
 
 
 def test_false_condition_makes_other_missing_predicate_irrelevant() -> None:

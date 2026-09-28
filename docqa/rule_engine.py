@@ -63,8 +63,16 @@ def evaluate_predicate(
         return Truth.TRUE if fact is not None else Truth.FALSE
     if predicate.operator == "not_exists":
         return Truth.FALSE if fact is not None else Truth.UNKNOWN
+    if predicate.operator == "not_before_if_present" and fact is None:
+        return Truth.TRUE
     if fact is None:
         return Truth.UNKNOWN
+    if predicate.operator == "within_natural_days_from_next_day":
+        related = facts.get(predicate.related_field_id or "")
+        if related is None or fact.kind != "date" or related.kind != "date":
+            return Truth.UNKNOWN
+        elapsed_days = (fact.value - related.value).days
+        return Truth.TRUE if 1 <= elapsed_days <= int(Decimal(predicate.values[0].value)) else Truth.FALSE
     if any(not _same_comparison_domain(fact, value) for value in predicate.values):
         return Truth.UNKNOWN
 
@@ -77,9 +85,13 @@ def evaluate_predicate(
         result = any(_semantic_equal(fact, value) for value in values)
     elif predicate.operator == "not_in":
         result = not any(_semantic_equal(fact, value) for value in values)
+    elif predicate.operator == "gt":
+        result = Decimal(str(fact.value)) > Decimal(str(values[0].value))
     elif predicate.operator == "before":
         result = fact.value < values[0].value
     elif predicate.operator == "on_or_after":
+        result = fact.value >= values[0].value
+    elif predicate.operator == "not_before_if_present":
         result = fact.value >= values[0].value
     elif predicate.operator == "between":
         result = values[0].value <= fact.value <= values[1].value
@@ -118,6 +130,18 @@ def _predicate_detail(
     missing: set[str] = set()
     conflicts: set[str] = set()
     if truth is Truth.UNKNOWN:
+        if predicate.operator == "within_natural_days_from_next_day":
+            related_id = predicate.related_field_id or ""
+            related = facts.get(related_id)
+            if fact is None:
+                missing.add(predicate.field_id)
+            elif fact.kind != "date":
+                conflicts.add(f"TYPE_OR_UNIT_MISMATCH:{predicate.field_id}")
+            if related is None:
+                missing.add(related_id)
+            elif related.kind != "date":
+                conflicts.add(f"TYPE_OR_UNIT_MISMATCH:{related_id}")
+            return _DetailedTruth(truth, missing, conflicts)
         if fact is None:
             missing.add(predicate.field_id)
         elif any(

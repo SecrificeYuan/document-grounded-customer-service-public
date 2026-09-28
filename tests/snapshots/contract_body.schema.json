@@ -574,12 +574,27 @@
             "neq",
             "in",
             "not_in",
+            "gt",
             "before",
             "on_or_after",
-            "between"
+            "not_before_if_present",
+            "between",
+            "within_natural_days_from_next_day"
           ],
           "title": "Operator",
           "type": "string"
+        },
+        "related_field_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Related Field Id"
         },
         "values": {
           "items": {

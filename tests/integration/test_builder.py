@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 
 from docqa.errors import ContractBlocked, TransportExhausted
+from docqa.contract_builder import _repair_reversed_override_edges
+from docqa.contract_validator import validate_contract
+from docqa.contract_store import ReviewRecord
+from docqa.models.common import Issue
 from docqa.models.contract import ContractWarning, UnitDefinition
 from tests.fake_llm import FakeLLMClient
 from tests.fixtures.builders import (
@@ -52,6 +57,44 @@ def test_invalid_json_can_be_repaired_once(tmp_path) -> None:
     assert repair_payload["validation_errors"][0]["code"] == "INVALID_CONTRACT_SCHEMA"
 
 
+def test_reciprocal_override_is_normalized_only_when_date_order_is_proven() -> None:
+    body = make_contract()
+    body.policy_units[0].effective_from = datetime(2030, 1, 1).date()
+    body.policy_units[0].overrides_unit_ids = [body.policy_units[1].unit_id]
+    docs = make_documents()
+    issues = validate_contract(body, docs).issues
+    repaired = _repair_reversed_override_edges(body, issues, docs)
+    assert repaired is not None
+    assert repaired.policy_units[0].overrides_unit_ids == []
+    assert repaired.policy_units[1].overrides_unit_ids == [body.policy_units[0].unit_id]
+    assert body.policy_units[0].overrides_unit_ids != []
+    body.policy_units[0].effective_from = body.policy_units[1].effective_from
+    assert _repair_reversed_override_edges(body, validate_contract(body, docs).issues, docs) is None
+
+
+def test_blocked_review_prevents_silent_rebuild_of_same_contract(tmp_path) -> None:
+    first = make_builder(FakeLLMClient([contract_reply()]), tmp_path)
+    contract = first.get_or_build(make_documents())
+    first.store.save(
+        contract,
+        ReviewRecord(
+            body_sha256=contract.manifest.body_sha256,
+            status="blocked",
+            reviewed_at=datetime(2030, 1, 1, tzinfo=timezone.utc),
+            issues=[Issue(code="SEMANTIC_REVIEW_FAILED", message="requires review")],
+            manual_change_notes=[],
+        ),
+    )
+    client = FakeLLMClient([contract_reply()])
+
+    with pytest.raises(ContractBlocked, match="REVIEW_BLOCKED"):
+        make_builder(client, tmp_path).get_or_build(make_documents())
+    with pytest.raises(ContractBlocked, match="REVIEW_BLOCKED"):
+        make_builder(client, tmp_path).get_or_build(make_documents(), force=True)
+
+    assert client.calls == []
+
+
 def test_second_invalid_result_blocks_startup(tmp_path) -> None:
     client = FakeLLMClient([raw_reply(""), raw_reply("{bad")])
 
@@ -60,6 +103,53 @@ def test_second_invalid_result_blocks_startup(tmp_path) -> None:
 
     assert len(client.calls) == 2
     assert "{bad" not in str(caught.value)
+
+
+def test_exact_evidence_can_repair_only_literal_annotations_after_model_repair(tmp_path) -> None:
+    from tests.fixtures.builders import NEW_TEXT
+
+    invalid = make_contract()
+    claim = invalid.policy_units[1].claims[0]
+    claim.canonical_text = NEW_TEXT
+    claim.normalized_literals = []
+    client = FakeLLMClient([contract_reply(invalid), contract_reply(invalid)])
+
+    result = make_builder(client, tmp_path).get_or_build(make_documents())
+
+    repaired = result.body.policy_units[1].claims[0]
+    assert {(item.kind, item.value, item.unit_code) for item in repaired.normalized_literals} == {
+        ("duration", "8", "NATURAL_DAY"),
+        ("duration", "12", "NATURAL_DAY"),
+    }
+    assert repaired.canonical_text == NEW_TEXT
+    assert [call.purpose for call in client.calls] == ["contract", "repair"]
+
+
+def test_literal_annotation_repair_rejects_unsupported_canonical_value(tmp_path) -> None:
+    invalid = make_contract()
+    claim = invalid.policy_units[1].claims[0]
+    claim.canonical_text = "材料齐备时，办理期限为9个自然日。"
+    claim.normalized_literals = []
+    client = FakeLLMClient([contract_reply(invalid), contract_reply(invalid)])
+
+    with pytest.raises(ContractBlocked, match="CLAIM_LITERAL_MISMATCH"):
+        make_builder(client, tmp_path).get_or_build(make_documents())
+
+
+def test_paraphrased_claim_with_source_literal_can_repair_annotation(tmp_path) -> None:
+    invalid = make_contract()
+    claim = invalid.policy_units[1].claims[0]
+    claim.canonical_text = "办理期限为8个自然日。"
+    claim.qualifiers = []
+    claim.normalized_literals = []
+    client = FakeLLMClient([contract_reply(invalid), contract_reply(invalid)])
+
+    result = make_builder(client, tmp_path).get_or_build(make_documents())
+
+    repaired = result.body.policy_units[1].claims[0]
+    assert [(item.kind, item.value, item.unit_code) for item in repaired.normalized_literals] == [
+        ("duration", "8", "NATURAL_DAY")
+    ]
 
 
 def test_incomplete_repair_reports_safe_failure_category(tmp_path) -> None:

@@ -23,6 +23,7 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--output", required=True, type=Path)
     run.add_argument("--cache-dir", default=Path("."), type=Path)
     run.add_argument("--as-of", type=str)
+    run.add_argument("--contract-key", type=str, help="use an explicitly selected reviewed contract")
 
     build = commands.add_parser("build-contract", help="build or refresh a contract")
     build.add_argument("--docs", nargs="+", required=True, type=Path)
@@ -34,6 +35,11 @@ def _parser() -> argparse.ArgumentParser:
     inspect.add_argument("--docs", nargs="+", required=True, type=Path)
     inspect.add_argument("--cache-dir", default=Path("."), type=Path)
     inspect.add_argument("--as-of", type=str)
+
+    approve = commands.add_parser("approve-aliases", help="apply explicit alias approvals offline")
+    approve.add_argument("--docs", nargs="+", required=True, type=Path)
+    approve.add_argument("--cache-dir", default=Path("."), type=Path)
+    approve.add_argument("--approval", required=True, type=Path)
 
     evaluate = commands.add_parser("evaluate", help="evaluate predictions offline")
     evaluate.add_argument("--predictions", required=True, type=Path)
@@ -80,7 +86,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             preflight_batch(args.docs, args.questions, args.output)
             config = AppConfig.from_env(require_key=True, as_of=_date(args.as_of))
             report = run_batch(
-                args.docs, args.questions, args.output, args.cache_dir, config, DeepSeekClient(config)
+                args.docs, args.questions, args.output, args.cache_dir, config, DeepSeekClient(config),
+                pinned_contract_key=args.contract_key,
             )
             print(
                 f"processed={report.processed} answered={report.answered} "
@@ -145,6 +152,22 @@ def main(argv: Sequence[str] | None = None) -> int:
                 f"review_status={review.status} warnings={len(selected.body.warnings)} "
                 f"stale={str(stale).lower()} model={selected.manifest.model} "
                 f"effort={selected.manifest.effort}"
+            )
+            return 0
+        if args.command == "approve-aliases":
+            from docqa.alias_approval import apply_alias_approvals
+            from docqa.contract_store import ContractStore
+
+            documents = _documents(args.docs)
+            contract = apply_alias_approvals(
+                ContractStore(_contract_store_root(args.cache_dir)),
+                documents,
+                args.approval,
+            )
+            print(
+                f"cache_key={contract.manifest.cache_key} "
+                f"body_sha256={contract.manifest.body_sha256} "
+                "review_status=manual_approved"
             )
             return 0
         from evaluation.evaluate import evaluate

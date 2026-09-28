@@ -22,8 +22,8 @@ def test_help_requires_no_key(monkeypatch: pytest.MonkeyPatch) -> None:
     assert caught.value.code == 0
 
 
-@pytest.mark.parametrize("command", ["run", "build-contract", "inspect-contract", "evaluate"])
-def test_help_exposes_all_four_commands(command: str) -> None:
+@pytest.mark.parametrize("command", ["run", "build-contract", "inspect-contract", "approve-aliases", "evaluate"])
+def test_help_exposes_all_commands(command: str) -> None:
     with pytest.raises(SystemExit) as caught:
         main([command, "--help"])
 

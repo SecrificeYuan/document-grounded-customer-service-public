@@ -6,7 +6,9 @@ import hashlib
 import json
 from collections.abc import Callable
 from datetime import datetime, timezone
+from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Protocol
 
 from pydantic import ValidationError
@@ -26,12 +28,13 @@ from docqa.llm_client import ModelReply, ModelRequest, model_request_payload
 from docqa.models.common import Issue
 from docqa.models.contract import ContractBody
 from docqa.models.documents import DocumentSet
+from docqa.zh_normalization import extract_literals, normalize_surface
 
 
 _SCHEMA_VERSION = "contract-body-v1"
 _PARSER_VERSION = "documents-v1"
 _NORMALIZATION_VERSION = "zh-normalization-v1"
-_VALIDATOR_VERSION = "contract-validator-v8"
+_VALIDATOR_VERSION = "contract-validator-v21"
 _DEFAULT_MAX_REQUEST_BYTES = 2_000_000
 _PROMPT_DIR = Path(__file__).resolve().parent.parent / "prompts"
 
@@ -75,6 +78,92 @@ def _stable_context(documents: DocumentSet) -> str:
         "evidence_blocks": blocks,
     }
     return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def _repair_evidenced_literal_annotations(
+    body: ContractBody | None, issues: list[Issue], documents: DocumentSet
+) -> ContractBody | None:
+    """Correct numeric metadata only when each literal appears in claim evidence."""
+
+    if body is None or not issues or any(
+        issue.code != "CLAIM_LITERAL_MISMATCH" for issue in issues
+    ):
+        return None
+    candidate = body.model_copy(deep=True)
+    evidence = {block.block_id: block for block in documents.blocks}
+    units = [
+        SimpleNamespace(
+            unit_code=unit.unit_code,
+            aliases=[unit.display_name, f"个{unit.display_name}", *unit.aliases],
+            dimension=unit.dimension,
+        )
+        for unit in candidate.units
+    ]
+    bad_ids = {object_id for issue in issues for object_id in issue.object_ids}
+    repaired: set[str] = set()
+    for policy_unit in candidate.policy_units:
+        for claim in policy_unit.claims:
+            if claim.claim_id not in bad_ids:
+                continue
+            canonical = normalize_surface(claim.canonical_text)
+            source_texts = [
+                evidence[evidence_id].text
+                for evidence_id in claim.evidence_ids
+                if evidence_id in evidence
+            ]
+            try:
+                literals = extract_literals(claim.canonical_text, units)
+                source_literals = [
+                    value
+                    for text in source_texts
+                    for value in extract_literals(text, units)
+                ]
+            except ValueError:
+                return None
+            key = lambda value: (
+                value.kind, Decimal(value.value), value.unit_code
+            )
+            if literals:
+                if not {key(value) for value in literals}.issubset(
+                    {key(value) for value in source_literals}
+                ):
+                    return None
+            elif not any(canonical in normalize_surface(text) for text in source_texts):
+                return None
+            claim.normalized_literals = [
+                value
+                for value in claim.normalized_literals
+                if value.kind not in {"duration", "money", "quantity"}
+            ] + literals
+            repaired.add(claim.claim_id)
+    if repaired != bad_ids or not validate_contract(candidate, documents).valid:
+        return None
+    return candidate
+
+
+def _repair_reversed_override_edges(
+    body: ContractBody | None, issues: list[Issue], documents: DocumentSet
+) -> ContractBody | None:
+    """Remove only reciprocal old-to-new edges with a strict start-date order."""
+
+    if body is None or not issues or any(issue.code != "OVERRIDE_CYCLE" for issue in issues):
+        return None
+    candidate = body.model_copy(deep=True)
+    units = {unit.unit_id: unit for unit in candidate.policy_units}
+    for issue in issues:
+        path = issue.object_ids
+        if len(path) != 3 or path[0] != path[2] or path[0] == path[1]:
+            return None
+        first, second = units.get(path[0]), units.get(path[1])
+        if first is None or second is None or first.family_id != second.family_id:
+            return None
+        if first.unit_id not in second.overrides_unit_ids or second.unit_id not in first.overrides_unit_ids:
+            return None
+        if first.effective_from is None or second.effective_from is None or first.effective_from == second.effective_from:
+            return None
+        older, newer = sorted((first, second), key=lambda unit: unit.effective_from)
+        older.overrides_unit_ids.remove(newer.unit_id)
+    return candidate if validate_contract(candidate, documents).valid else None
 
 
 class ContractBuilder:
@@ -196,6 +285,8 @@ class ContractBuilder:
         """Return a valid cached contract or build it with at most one repair."""
 
         key = self._cache_key(documents)
+        if self.store.review_status(documents.document_set_hash, key) == "blocked":
+            raise ContractBlocked("contract cache review is blocked: REVIEW_BLOCKED")
         if not force:
             cached = self.store.load(
                 documents.document_set_hash, key, documents=documents
@@ -234,6 +325,13 @@ class ContractBuilder:
                 max_output_tokens=self.config.contract_max_output_tokens,
             )
             body, issues, _ = self._parse_and_validate(reply, documents)
+
+        normalized = _repair_evidenced_literal_annotations(body, issues, documents)
+        if normalized is not None:
+            body, issues = normalized, []
+        normalized = _repair_reversed_override_edges(body, issues, documents)
+        if normalized is not None:
+            body, issues = normalized, []
 
         if body is None or issues:
             codes = ", ".join(sorted({issue.code for issue in issues})) or "UNKNOWN"

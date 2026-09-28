@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
+from decimal import Decimal
 from typing import Literal
 
 from pydantic import Field, field_validator, model_validator
@@ -11,7 +12,7 @@ from docqa.models.common import NormalizedValue, StrictModel
 
 
 ValueKind = Literal["string", "enum", "boolean", "integer", "decimal", "date", "datetime", "duration", "money", "quantity"]
-PredicateOperator = Literal["exists", "not_exists", "eq", "neq", "in", "not_in", "before", "on_or_after", "between"]
+PredicateOperator = Literal["exists", "not_exists", "eq", "neq", "in", "not_in", "gt", "before", "on_or_after", "not_before_if_present", "between", "within_natural_days_from_next_day"]
 
 
 def _nonblank(value: str) -> str:
@@ -70,6 +71,7 @@ class UnitDefinition(StrictModel):
 class Predicate(StrictModel):
     field_id: str
     operator: PredicateOperator
+    related_field_id: str | None = None
     values: list[NormalizedValue] = Field(default_factory=list)
 
     _required_id = field_validator("field_id")(_nonblank)
@@ -79,7 +81,7 @@ class Predicate(StrictModel):
         size = len(self.values)
         if self.operator in {"exists", "not_exists"} and size != 0:
             raise ValueError(f"{self.operator} requires no values")
-        if self.operator in {"eq", "neq", "before", "on_or_after"} and size != 1:
+        if self.operator in {"eq", "neq", "gt", "before", "on_or_after", "not_before_if_present"} and size != 1:
             raise ValueError(f"{self.operator} requires exactly one value")
         if self.operator in {"in", "not_in"} and size < 1:
             raise ValueError(f"{self.operator} requires at least one value")
@@ -87,10 +89,27 @@ class Predicate(StrictModel):
             raise ValueError("between requires exactly two values")
         if size > 1 and len({value.kind for value in self.values}) != 1:
             raise ValueError("predicate values must have the same kind")
-        if self.operator in {"before", "on_or_after", "between"} and any(
+        if self.operator in {"before", "on_or_after", "not_before_if_present", "between"} and any(
             value.kind not in {"date", "datetime"} for value in self.values
         ):
             raise ValueError("temporal operators require date or datetime values")
+        if self.operator == "gt" and any(
+            value.kind not in {"integer", "decimal", "duration", "money", "quantity"}
+            for value in self.values
+        ):
+            raise ValueError("gt requires a numeric value")
+        if self.operator == "within_natural_days_from_next_day":
+            if not self.related_field_id or not self.related_field_id.strip():
+                raise ValueError("relative date window requires related_field_id")
+            if self.related_field_id == self.field_id:
+                raise ValueError("relative date window requires two different fields")
+            if size != 1 or self.values[0].kind != "duration":
+                raise ValueError("relative date window requires one duration value")
+            days = Decimal(self.values[0].value)
+            if days <= 0 or days != days.to_integral_value():
+                raise ValueError("relative date window requires positive whole days")
+        elif self.related_field_id is not None:
+            raise ValueError("related_field_id is only valid for relative date windows")
         return self
 
 

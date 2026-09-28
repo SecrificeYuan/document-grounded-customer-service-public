@@ -152,6 +152,23 @@ class ContractStore:
         }
         atomic_write(ready_path, _canonical_json(ready))
 
+    def review_status(self, document_set_hash: str, key: str) -> str | None:
+        """Read an integrity-checked review status, including blocked reviews."""
+
+        try:
+            directory = self.cache_dir(document_set_hash, key)
+            ready = json.loads((directory / "ready.json").read_text(encoding="utf-8"))
+            review_text = (directory / "review.json").read_text(encoding="utf-8")
+            expected = ready["file_sha256"]["review.json"]
+            if hashlib.sha256(review_text.encode("utf-8")).hexdigest() != expected:
+                return None
+            review = ReviewRecord.model_validate_json(review_text)
+            if ready["body_sha256"] != review.body_sha256:
+                return None
+            return review.status
+        except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError):
+            return None
+
     def load(self, document_set_hash: str, key: str, *, documents: DocumentSet | None = None) -> DocumentContract | None:
         try:
             directory = self.cache_dir(document_set_hash, key)

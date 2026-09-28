@@ -8,7 +8,7 @@ import pytest
 from pydantic import TypeAdapter
 
 from docqa.models.analysis import AnalysisResult
-from docqa.models.common import BoolValue, DateValue, NormalizedValue
+from docqa.models.common import BoolValue, DateValue, NormalizedValue, QuantityValue
 from docqa.models.contract import ContractBody, Predicate, TimeBasis
 from tests.fixtures.builders import make_analysis, make_contract, make_documents
 
@@ -51,6 +51,16 @@ def test_predicate_rejects_wrong_value_count_or_kind(operator: str, values: list
 def test_predicate_accepts_closed_date_interval() -> None:
     predicate = Predicate(field_id="F_DATE", operator="between", values=[DateValue(kind="date", value=date(2030, 1, 10)), DateValue(kind="date", value=date(2030, 1, 19))])
     assert [value.value for value in predicate.values] == [date(2030, 1, 10), date(2030, 1, 19)]
+
+
+def test_gt_predicate_accepts_one_numeric_threshold_only() -> None:
+    threshold = QuantityValue(kind="quantity", value="20", unit_code="GB")
+    predicate = Predicate(field_id="F_USAGE", operator="gt", values=[threshold])
+    assert predicate.values == [threshold]
+    with pytest.raises(ValueError):
+        Predicate(field_id="F_USAGE", operator="gt", values=[])
+    with pytest.raises(ValueError):
+        Predicate(field_id="F_USAGE", operator="gt", values=[BoolValue(kind="boolean", value=True)])
 
 
 def test_time_basis_requires_field_only_for_field_kind() -> None:

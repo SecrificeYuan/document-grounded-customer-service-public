@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -15,8 +15,8 @@ from docqa.contract_store import (
     canonical_body_sha256,
 )
 from docqa.contract_validator import validate_contract
-from docqa.models.common import Issue
-from docqa.models.contract import ContractWarning, UnitDefinition
+from docqa.models.common import DateValue, Issue, QuantityValue
+from docqa.models.contract import ConditionGroup, ContractWarning, EnumOption, FieldDefinition, Predicate, Topic, UnitDefinition
 from tests.fixtures.builders import make_contract, make_documents
 
 
@@ -69,10 +69,183 @@ def test_nonblocking_contract_warning_does_not_invalidate_contract() -> None:
     assert report.valid
 
 
+def test_unsupported_policy_condition_cannot_be_only_a_nonblocking_warning() -> None:
+    body = make_contract()
+    body.warnings.append(
+        ContractWarning(
+            code="UNSUPPORTED_GT_PREDICATE",
+            severity="warning",
+            message="A policy threshold cannot be evaluated.",
+            evidence_ids=["E_NEW"],
+        )
+    )
+    assert "UNSUPPORTED_CONDITION" in issue_codes(body)
+
+
+def test_next_day_window_validates_related_date_and_natural_day_unit() -> None:
+    body = make_contract()
+    body.fields.append(FieldDefinition(field_id="F_RECEIPT", display_name="签收日期", description="签收日期", value_kind="date", evidence_ids=["E_NEW"]))
+    predicate = Predicate(field_id="F_DATE", operator="within_natural_days_from_next_day", related_field_id="F_RECEIPT", values=[QuantityValue(kind="duration", value="7", unit_code="NATURAL_DAY")])
+    body.policy_units[1].applicability_any[0].all.append(predicate)
+    assert "FIELD_KIND_CONFLICT" not in issue_codes(body)
+    assert "INVALID_RELATIVE_DATE_PREDICATE" not in issue_codes(body)
+    body.fields[-1].value_kind = "boolean"
+    assert "INVALID_RELATIVE_DATE_PREDICATE" in issue_codes(body)
+    body.fields[-1].value_kind = "date"
+    predicate.values[0].unit_code = "MISSING"
+    assert "INVALID_RELATIVE_DATE_PREDICATE" in issue_codes(body)
+
+
+def test_case_eligibility_deadline_requires_an_evaluable_date_window() -> None:
+    body = make_contract()
+    body.policy_units[0].claims[0].canonical_text = "签收次日起7个自然日内可以申请退货。"
+    assert "UNGUARDED_RELATIVE_DEADLINE" in issue_codes(body)
+    body.fields.append(FieldDefinition(field_id="F_RECEIPT", display_name="签收日期", description="签收日期", value_kind="date", evidence_ids=["E_OLD"]))
+    body.policy_units[0].applicability_any[0].all.append(Predicate(field_id="F_DATE", operator="within_natural_days_from_next_day", related_field_id="F_RECEIPT", values=[QuantityValue(kind="duration", value="7", unit_code="NATURAL_DAY")]))
+    assert "UNGUARDED_RELATIVE_DEADLINE" not in issue_codes(body)
+
+
+def test_event_before_cutoff_cannot_also_be_time_basis_from_cutoff() -> None:
+    body = make_contract()
+    old = body.policy_units[0]
+    old.effective_from = date(2030, 1, 10)
+    old.effective_to = None
+    assert "UNSATISFIABLE_TIME_BASIS" in issue_codes(body)
+
+
+def test_alternative_causes_cannot_be_one_boolean_fact() -> None:
+    body = make_contract()
+    body.fields.append(FieldDefinition(field_id="F_DAMAGE", display_name="是否进水或受潮", description="是否进水或受潮", aliases=["进水、受潮"], value_kind="boolean", evidence_ids=["E_NEW"]))
+    body.policy_units[0].applicability_any[0].all.append(Predicate(field_id="F_DAMAGE", operator="eq", values=[{"kind": "boolean", "value": True}]))
+    assert "COMPOSITE_BOOLEAN_REASONS" in issue_codes(body)
+
+
+@pytest.mark.parametrize("action", ["拆机", "改装", "维修"])
+def test_unauthorized_action_enum_alias_must_preserve_qualifier(action: str) -> None:
+    body = make_contract()
+    body.fields.append(
+        FieldDefinition(
+            field_id="F_UNAUTHORIZED_ACTION",
+            display_name="免费保修排除原因",
+            description="未经授权的操作",
+            value_kind="enum",
+            allowed_values=[EnumOption(code="unauthorized", display_name=f"未经授权{action}", aliases=[action])],
+            evidence_ids=["E_NEW"],
+        )
+    )
+    assert "UNSAFE_ENUM_QUALIFIER_ALIAS" in issue_codes(body)
+    body.fields[-1].allowed_values[0].aliases = [f"未经授权{action}"]
+    assert "UNSAFE_ENUM_QUALIFIER_ALIAS" not in issue_codes(body)
+
+
+def test_claim_cannot_drop_shared_user_cause_from_alternative_effect() -> None:
+    body = make_contract()
+    documents = make_documents()
+    documents.blocks[0].text = "因用户原因造成明显损坏或配件缺失的商品不适用无理由退货。"
+    claim = body.policy_units[0].claims[0]
+    claim.canonical_text = "配件缺失的商品不适用无理由退货。"
+    claim.normalized_literals = []
+    assert "LOST_CAUSAL_QUALIFIER" in {
+        issue.code for issue in validate_contract(body, documents).issues
+    }
+    claim.canonical_text = "因用户原因造成配件缺失的商品不适用无理由退货。"
+    assert "LOST_CAUSAL_QUALIFIER" not in {
+        issue.code for issue in validate_contract(body, documents).issues
+    }
+
+
 def test_blocking_contract_warning_is_an_issue() -> None:
     body = make_contract()
     body.warnings.append(ContractWarning(code="RISK", severity="blocking", message="存在未解决冲突。", evidence_ids=["E_NEW"]))
     assert "BLOCKING_WARNING" in issue_codes(body)
+
+
+def test_covered_topic_without_any_policy_unit_is_blocked() -> None:
+    body = make_contract()
+    body.policy_units.clear()
+
+    assert "COVERED_TOPIC_WITHOUT_UNIT" in issue_codes(body)
+
+
+def test_in_scope_uncovered_topic_does_not_require_a_policy_unit() -> None:
+    body = make_contract()
+    body.scope.append(
+        Topic(
+            topic_id="T_UNCOVERED",
+            description="业务内未公布的办理日期",
+            aliases=[],
+            evidence_ids=["E_SCOPE"],
+            disposition="in_scope_uncovered",
+        )
+    )
+
+    assert "COVERED_TOPIC_WITHOUT_UNIT" not in issue_codes(body)
+
+
+def test_optional_old_status_guard_cannot_also_be_a_required_field() -> None:
+    body = make_contract()
+    unit = body.policy_units[1]
+    body.fields.append(
+        FieldDefinition(
+            field_id="F_OLD_STATUS_DATE",
+            display_name="旧状态日期",
+            description="仅在已知时排除新规则",
+            aliases=[],
+            value_kind="date",
+            allowed_values=[],
+            evidence_ids=["E_NEW"],
+        )
+    )
+    unit.applicability_any = [
+        ConditionGroup(
+            all=[
+                Predicate(
+                    field_id="F_OLD_STATUS_DATE",
+                    operator="not_before_if_present",
+                    values=[DateValue(kind="date", value=date(2030, 1, 10))],
+                )
+            ]
+        )
+    ]
+    assert "OPTIONAL_GUARD_REQUIRED" not in issue_codes(body)
+
+    unit.required_field_ids.append("F_OLD_STATUS_DATE")
+    assert "OPTIONAL_GUARD_REQUIRED" in issue_codes(body)
+
+
+def test_numeric_source_fact_cannot_disappear_from_all_claims() -> None:
+    from docqa.models.documents import EvidenceBlock
+
+    body = make_contract()
+    documents = make_documents()
+    documents.blocks.append(
+        EvidenceBlock(
+            block_id="E_CAPACITY",
+            document_id="D_TERM",
+            document_name="期限规则.md",
+            page=3,
+            section_path=["容量"],
+            ordinal=4,
+            text="服务提供128个自然日的资料保留。",
+            source_sha256="a" * 64,
+        )
+    )
+
+    report = validate_contract(body, documents)
+
+    assert any(
+        issue.code == "NUMERIC_EVIDENCE_WITHOUT_CLAIM"
+        and issue.object_ids == ["E_CAPACITY"]
+        for issue in report.issues
+    )
+
+    body.policy_units[0].claims[0].evidence_ids.append("E_CAPACITY")
+    report = validate_contract(body, documents)
+    assert any(
+        issue.code == "NUMERIC_EVIDENCE_WITHOUT_CLAIM"
+        and issue.object_ids == ["E_CAPACITY"]
+        for issue in report.issues
+    )
 
 
 def test_cache_key_is_path_independent_and_configuration_sensitive() -> None:

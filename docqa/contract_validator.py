@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unicodedata
+import re
 from collections import Counter
 from datetime import date
 from decimal import Decimal
@@ -81,6 +82,18 @@ def validate_contract(body: ContractBody, documents: DocumentSet) -> ValidationR
         )
     policy_units = {item.unit_id: item for item in body.policy_units}
     claims = {claim.claim_id: claim for unit in body.policy_units for claim in unit.claims}
+    topics_with_units = {
+        topic_id for unit in body.policy_units for topic_id in unit.topic_ids
+    }
+    for topic in body.scope:
+        if topic.disposition == "covered" and topic.topic_id not in topics_with_units:
+            issues.append(
+                _issue(
+                    "COVERED_TOPIC_WITHOUT_UNIT",
+                    "covered topic has no policy unit or claim",
+                    topic.topic_id,
+                )
+            )
 
     for document in body.documents:
         if document.document_id not in source_documents:
@@ -102,15 +115,83 @@ def validate_contract(body: ContractBody, documents: DocumentSet) -> ValidationR
             if evidence_id not in evidence:
                 issues.append(_issue("UNKNOWN_EVIDENCE", f"{kind} references unknown evidence", owner_id, evidence_id))
 
+    if not ambiguous_aliases:
+        claims_by_evidence: dict[str, list] = {}
+        for policy_unit in body.policy_units:
+            for claim in policy_unit.claims:
+                for evidence_id in claim.evidence_ids:
+                    claims_by_evidence.setdefault(evidence_id, []).append(claim)
+        for block in documents.blocks:
+            source_literals = {
+                (value.kind, Decimal(value.value), value.unit_code)
+                for value in extract_literals(block.text, literal_units)
+            }
+            if not source_literals:
+                continue
+            matching_claim = any(
+                source_literals
+                & {
+                    (value.kind, Decimal(value.value), value.unit_code)
+                    for value in extract_literals(claim.canonical_text, literal_units)
+                }
+                for claim in claims_by_evidence.get(block.block_id, [])
+            )
+            if not matching_claim:
+                issues.append(
+                    _issue(
+                        "NUMERIC_EVIDENCE_WITHOUT_CLAIM",
+                        "source block has no claim for its numeric fact",
+                        block.block_id,
+                    )
+                )
+
+    predicate_field_ids = {
+        predicate.field_id
+        for unit in body.policy_units
+        for group in unit.applicability_any
+        for predicate in group.all
+    }
     for field in body.fields:
+        if (
+            field.value_kind == "boolean"
+            and field.field_id in predicate_field_ids
+            and any("、" in label or "或" in label for label in (field.display_name, *field.aliases))
+        ):
+            issues.append(_issue("COMPOSITE_BOOLEAN_REASONS", "alternative causes need independently parseable values and OR branches", field.field_id))
         if field.value_kind == "enum":
             codes = [option.code for option in field.allowed_values]
             if not codes or _duplicates(codes):
                 issues.append(_issue("INVALID_ENUM_DEFINITION", "enum field requires unique allowed values", field.field_id))
+            for option in field.allowed_values:
+                if "未经授权" in normalize_surface(option.display_name) and any(
+                    "未经授权" not in normalize_surface(alias) for alias in option.aliases
+                ):
+                    issues.append(
+                        _issue(
+                            "UNSAFE_ENUM_QUALIFIER_ALIAS",
+                            "alias drops the unauthorized qualifier from an exclusion reason",
+                            field.field_id,
+                            option.code,
+                        )
+                    )
         elif field.allowed_values:
             issues.append(_issue("INVALID_ENUM_DEFINITION", "non-enum field cannot declare allowed values", field.field_id))
 
     for unit in body.policy_units:
+        for claim in unit.claims:
+            deadline = re.search(r"次日起\s*(\d+)\s*个自然日内.*?申请", normalize_surface(claim.canonical_text))
+            if deadline and (
+                not unit.applicability_any
+                or any(
+                    not any(
+                        predicate.operator == "within_natural_days_from_next_day"
+                        and Decimal(predicate.values[0].value) == Decimal(deadline.group(1))
+                        for predicate in group.all
+                    )
+                    for group in unit.applicability_any
+                )
+            ):
+                issues.append(_issue("UNGUARDED_RELATIVE_DEADLINE", "case eligibility claim lacks an evaluable next-day natural-day window", unit.unit_id, claim.claim_id))
         if unit.effective_from and unit.effective_to and unit.effective_from > unit.effective_to:
             issues.append(_issue("INVALID_DATE_RANGE", "policy unit date range is reversed", unit.unit_id))
         for topic_id in unit.topic_ids:
@@ -123,12 +204,56 @@ def validate_contract(body: ContractBody, documents: DocumentSet) -> ValidationR
             field = fields.get(unit.time_basis.field_id or "")
             if field is None or not field.evidence_ids:
                 issues.append(_issue("INVALID_TIME_BASIS", "time basis field is missing or lacks evidence", unit.unit_id, unit.time_basis.field_id or ""))
+            if unit.effective_from is not None:
+                for group in unit.applicability_any:
+                    for predicate in group.all:
+                        if (
+                            predicate.field_id == unit.time_basis.field_id
+                            and predicate.operator == "before"
+                            and predicate.values[0].kind == "date"
+                            and predicate.values[0].value <= unit.effective_from
+                        ):
+                            issues.append(_issue("UNSATISFIABLE_TIME_BASIS", "event date must be before the effective start but is also the time basis", unit.unit_id, predicate.field_id))
+
+        optional_guard_fields = {
+            predicate.field_id
+            for group in unit.applicability_any
+            for predicate in group.all
+            if predicate.operator == "not_before_if_present"
+        }
+        for field_id in sorted(optional_guard_fields.intersection(unit.required_field_ids)):
+            issues.append(
+                _issue(
+                    "OPTIONAL_GUARD_REQUIRED",
+                    "optional old-status guard is also listed as a required field",
+                    unit.unit_id,
+                    field_id,
+                )
+            )
 
         for group in unit.applicability_any:
             for predicate in group.all:
                 field = fields.get(predicate.field_id)
                 if field is None:
                     issues.append(_issue("UNKNOWN_FIELD", "predicate references unknown field", unit.unit_id, predicate.field_id))
+                    continue
+                if predicate.operator == "within_natural_days_from_next_day":
+                    related = fields.get(predicate.related_field_id or "")
+                    value = predicate.values[0]
+                    duration_unit = unit_definitions.get(value.unit_code)
+                    if (
+                        field.value_kind != "date"
+                        or related is None
+                        or related.value_kind != "date"
+                        or not related.evidence_ids
+                        or duration_unit is None
+                        or duration_unit.dimension != "duration"
+                        or "自然日" not in {
+                            normalize_surface(alias)
+                            for alias in (duration_unit.display_name, *duration_unit.aliases)
+                        }
+                    ):
+                        issues.append(_issue("INVALID_RELATIVE_DATE_PREDICATE", "relative date window requires two evidenced date fields and a natural-day duration unit", unit.unit_id, predicate.field_id, predicate.related_field_id or ""))
                     continue
                 for value in predicate.values:
                     if value.kind != field.value_kind:
@@ -172,6 +297,24 @@ def validate_contract(body: ContractBody, documents: DocumentSet) -> ValidationR
                 for evidence_id in claim.evidence_ids
                 if evidence_id in evidence
             ]
+            for source in evidence_surfaces:
+                for causal_rule in re.finditer(
+                    r"因(?P<cause>[^，。；;\n]{2,12}?)造成(?P<effects>[^，。；;\n]+)",
+                    source,
+                ):
+                    cause = causal_rule.group("cause")
+                    effects = re.split(r"[、或]", causal_rule.group("effects"))
+                    for effect in effects:
+                        effect = re.split(r"[的，。；;\n]", effect.strip(), maxsplit=1)[0]
+                        if len(effect) >= 2 and effect in canonical_surface and cause not in canonical_surface:
+                            issues.append(
+                                _issue(
+                                    "LOST_CAUSAL_QUALIFIER",
+                                    "claim drops a shared causal condition from an alternative effect",
+                                    claim.claim_id,
+                                )
+                            )
+                            break
             for qualifier in claim.qualifiers:
                 qualifier_surface = normalize_surface(qualifier)
                 if not qualifier_surface or qualifier_surface not in canonical_surface:
@@ -237,6 +380,8 @@ def validate_contract(body: ContractBody, documents: DocumentSet) -> ValidationR
                     issues.append(_issue("OVERLAPPING_VERSIONS", "overlapping versions lack an explicit override", left.unit_id, right.unit_id))
 
     for warning in body.warnings:
+        if warning.code.startswith("UNSUPPORTED_"):
+            issues.append(_issue("UNSUPPORTED_CONDITION", warning.message, warning.code))
         if warning.severity == "blocking":
             issues.append(_issue("BLOCKING_WARNING", warning.message, warning.code))
 

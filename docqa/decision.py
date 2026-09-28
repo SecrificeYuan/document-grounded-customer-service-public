@@ -138,6 +138,8 @@ def _fact_source_matches(
                     positives.add(label[2:])
                 if label.endswith("状态") and len(label) > 2:
                     positives.add(label[:-2])
+                if label.endswith("已完成") and len(label) > 3:
+                    positives.add("完成" + label[:-3])
             negatives = {
                 form
                 for label in positives

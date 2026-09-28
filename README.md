@@ -112,6 +112,25 @@ finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
 
 成功完成批次时，终端打印 `processed=... answered=... handed_off=... item_failures=...`。首次运行若没有有效契约缓存，会先调用模型生成契约；生成或校验失败时，命令可能提前结束，不能仅凭缓存目录存在就认定答案文件已经生成。
 
+自动生成的契约即使显示 `auto_approved`，也只表示通过程序能验证的结构、数值和证据检查，不代表业务范围分类或答案语义已经人工审核。首次使用自己的 Markdown 时，先用 `build-contract` 生成契约，再用 `inspect-contract` 核对所选缓存，并查看 `artifacts/contracts/<文档集哈希>/<缓存键>/body.json` 中的 `scope`、`policy_units`、日期基准和必要字段。重点区分“文档没有承诺的领域内问题”与“业务范围外问题”，以及选择规则版本的日期与计算期限起点的日期。提示词变化会改变契约缓存键，可能触发新的在线契约生成及费用；旧缓存的结果不能当作新版本的验证结果。
+
+校验器会拦截完全没有对应数值 Claim 的证据块，并且只在 Claim 中的数值和单位可由其关联原文核对时补正数值标注；这不能证明非数值业务语义正确。若人工确认了原文之外的同义表达或拆分了不同适用条件的 Claim，应保存独立的 `manual_approved` 契约与修改说明，并以该缓存键做后续测试，不要覆盖自动生成的原件或混用不同契约的评分。
+合同现在支持同数值类型、同单位的严格大于 `gt` 条件，例如“已用容量超过上限”。如果生成结果承认某个会改变业务结论的条件无法表达，`UNSUPPORTED_*` 警告会阻断合同；仅把字段列为必填不能替代阈值判断。
+若审核发现缓存契约有业务语义错误并将其标为 `blocked`，同一文档和生成配置再次构建会停止，不会静默覆盖审核结论。应修正生成依据并取得新缓存键，或在独立缓存键保存经过复核的契约。
+
+若业务负责人明确确认了**原文未直接证明**的同义表达，可选择离线审核别名。默认只用文档运行时仍按证据不足转人工；审核文件不得包含参考答案，也不会发给模型。先从 `build-contract` 的输出记录 `cache_key` 与 `body_sha256`，再在仓库外创建 UTF-8 JSON 文件：
+
+```json
+{"base_cache_key":"<生成合同的64位缓存键>","base_body_sha256":"<生成合同的64位正文哈希>","approval_note":"负责人确认此业务表达的等价关系","aliases":[{"field_id":"<枚举字段ID>","value_code":"<枚举值代码>","alias":"<经确认的用户表达>"}]}
+```
+
+```powershell
+.\.venv\Scripts\python.exe app.py approve-aliases --docs evaluation/blind_domain/docs/manual_v1.md evaluation/blind_domain/docs/notice_v2.md --cache-dir . --approval C:\path\to\local_approval.json
+.\.venv\Scripts\python.exe app.py run --docs evaluation/blind_domain/docs/manual_v1.md evaluation/blind_domain/docs/notice_v2.md --questions evaluation/blind_domain/questions.jsonl --output outputs/reviewed_predictions.jsonl --cache-dir . --as-of 2030-04-15 --contract-key "REPLACE_WITH_PRINTED_CACHE_KEY"
+```
+
+`approve-aliases` 不调用模型，会校验原合同正文哈希、字段和值代码，并另存 `manual_approved` 合同；原自动合同仍保留。只允许给已有枚举值添加明确批准的表达，不能借此新增业务规则或更改原文。审核文件应保存在仓库外；不同合同键的测试成绩应分开记录。
+
 ### 使用自己的文档和问题
 
 将示例命令中的 `--docs` 和 `--questions` 换成自己**获准发送给该模型服务**的文件。`--docs` 可列出多个 `.md` / `.pdf` 文件；不要直接传入含参考答案、密钥或无关私密资料的目录。问题文件采用 UTF-8 JSONL，每个非空行对应一个对象，例如：
